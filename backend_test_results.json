@@ -1,0 +1,147 @@
+{
+  "summary": {
+    "tests_run": 23,
+    "tests_passed": 23,
+    "success_rate": 100.0
+  },
+  "results": [
+    {
+      "test": "Admin Login",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.044912"
+    },
+    {
+      "test": "Dashboard Stats",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.090907"
+    },
+    {
+      "test": "Get Alunos",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.136131"
+    },
+    {
+      "test": "Create Aluno",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.185697"
+    },
+    {
+      "test": "Update Aluno",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.225260"
+    },
+    {
+      "test": "Aluno Age Validation (should fail)",
+      "success": true,
+      "details": "Status: 400",
+      "timestamp": "2025-11-26T23:28:37.266022"
+    },
+    {
+      "test": "Delete Aluno",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.343035"
+    },
+    {
+      "test": "Get Instrutores",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.378929"
+    },
+    {
+      "test": "Create Instrutor",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.424528"
+    },
+    {
+      "test": "Update Instrutor",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.463791"
+    },
+    {
+      "test": "Instrutor Age Validation (should fail)",
+      "success": true,
+      "details": "Status: 400",
+      "timestamp": "2025-11-26T23:28:37.495833"
+    },
+    {
+      "test": "Get Agendas",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.530669"
+    },
+    {
+      "test": "Create Agenda",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.592068"
+    },
+    {
+      "test": "Agenda Time Validation (should fail)",
+      "success": true,
+      "details": "Status: 400",
+      "timestamp": "2025-11-26T23:28:37.628388"
+    },
+    {
+      "test": "Get Treinos",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.666134"
+    },
+    {
+      "test": "Create Aluno for Treino",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.701771"
+    },
+    {
+      "test": "Create Treino Simples",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.751504"
+    },
+    {
+      "test": "Create Treino Personalizado",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.792405"
+    },
+    {
+      "test": "Update Treino",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.831137"
+    },
+    {
+      "test": "Delete Treino",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.872691"
+    },
+    {
+      "test": "Delete Test Aluno",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.909792"
+    },
+    {
+      "test": "Delete Test Agenda",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:37.984317"
+    },
+    {
+      "test": "Delete Test Instrutor",
+      "success": true,
+      "details": "Status: 200",
+      "timestamp": "2025-11-26T23:28:38.025200"
+    }
+  ]
+}
