@@ -119,7 +119,7 @@ class AgendaUpdate(BaseModel):
 class Treino(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id_treino: str
-    tipo_treino: str  # 'Simples' ou 'Personalizado'
+    tipo_treino: str
     nome_treino: str
     aluno_id_aluno: str
     aluno_nome: Optional[str] = None
@@ -127,6 +127,7 @@ class Treino(BaseModel):
     descricao: Optional[str] = None
     nivel: Optional[str] = None
     duracao: Optional[str] = None
+    concluido: bool = False
 
 class TreinoCreate(BaseModel):
     tipo_treino: str
@@ -145,6 +146,7 @@ class TreinoUpdate(BaseModel):
     descricao: Optional[str] = None
     nivel: Optional[str] = None
     duracao: Optional[str] = None
+    concluido: Optional[bool] = None
 
 class DashboardStats(BaseModel):
     total_alunos: int
@@ -152,6 +154,18 @@ class DashboardStats(BaseModel):
     total_agendas: int
     total_treinos: int
     agendas_disponiveis: int
+
+class TreinoPersonalizadoDetalhado(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id_treino: str
+    nome_treino: str
+    aluno_nome: str
+    instrutor_nome: str
+    nivel: Optional[str] = None
+    data: str
+    hora_inicio: str
+    hora_fim: str
+    concluido: bool
 
 # ===================== AUTH MIDDLEWARE =====================
 
@@ -226,6 +240,64 @@ async def get_dashboard_stats(admin_id: str = Depends(verify_token)):
         "total_treinos": total_treinos,
         "agendas_disponiveis": agendas_disponiveis
     }
+
+@api_router.get("/dashboard/treinos-personalizados", response_model=List[TreinoPersonalizadoDetalhado])
+async def get_treinos_personalizados_detalhados(admin_id: str = Depends(verify_token)):
+    # Buscar todos os treinos personalizados
+    treinos = await db.treinos.find({"tipo_treino": "Personalizado"}).to_list(1000)
+    
+    result = []
+    for treino in treinos:
+        # Buscar aluno
+        aluno = await db.alunos.find_one({"_id": ObjectId(treino['aluno_id_aluno'])})
+        aluno_nome = aluno['nome'] if aluno else "Aluno não encontrado"
+        
+        # Buscar agenda e instrutor se existir
+        instrutor_nome = "Não agendado"
+        data = "-"
+        hora_inicio = "-"
+        hora_fim = "-"
+        
+        if treino.get('agenda_id_agenda'):
+            agenda = await db.agendas.find_one({"_id": ObjectId(treino['agenda_id_agenda'])})
+            if agenda:
+                data = agenda['data']
+                hora_inicio = agenda['hora_inicio']
+                hora_fim = agenda['hora_fim']
+                
+                # Buscar instrutor
+                instrutor = await db.instrutores.find_one({"_id": ObjectId(agenda['instrutor_id_instrutor'])})
+                if instrutor:
+                    instrutor_nome = instrutor['nome']
+        
+        result.append({
+            "id_treino": str(treino['_id']),
+            "nome_treino": treino['nome_treino'],
+            "aluno_nome": aluno_nome,
+            "instrutor_nome": instrutor_nome,
+            "nivel": treino.get('nivel', '-'),
+            "data": data,
+            "hora_inicio": hora_inicio,
+            "hora_fim": hora_fim,
+            "concluido": treino.get('concluido', False)
+        })
+    
+    return result
+
+@api_router.patch("/treinos/{id_treino}/toggle-concluido")
+async def toggle_treino_concluido(id_treino: str, admin_id: str = Depends(verify_token)):
+    treino = await db.treinos.find_one({"_id": ObjectId(id_treino)})
+    if not treino:
+        raise HTTPException(status_code=404, detail="Treino não encontrado")
+    
+    novo_status = not treino.get('concluido', False)
+    
+    await db.treinos.update_one(
+        {"_id": ObjectId(id_treino)},
+        {"$set": {"concluido": novo_status}}
+    )
+    
+    return {"message": "Status atualizado", "concluido": novo_status}
 
 # ===================== ALUNOS CRUD =====================
 
@@ -440,7 +512,10 @@ async def create_treino(treino: TreinoCreate, admin_id: str = Depends(verify_tok
         if not agenda:
             raise HTTPException(status_code=404, detail="Agenda não encontrada")
     
-    result = await db.treinos.insert_one(treino.model_dump())
+    treino_dict = treino.model_dump()
+    treino_dict['concluido'] = False
+    
+    result = await db.treinos.insert_one(treino_dict)
     created = await db.treinos.find_one({"_id": result.inserted_id})
     
     return {
