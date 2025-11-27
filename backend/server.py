@@ -92,30 +92,32 @@ class InstrutorUpdate(BaseModel):
     email: Optional[EmailStr] = None
     telefone: Optional[str] = None
 
-class Agenda(BaseModel):
+# Nova estrutura de Agenda (Horário Fixo)
+class AgendaFixa(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id_agenda: str
-    data: str
+    instrutor_id_instrutor: str
+    instrutor_nome: Optional[str] = None
+    dias_semana: str  # Ex: "Seg-Sex", "Seg, Qua, Sex"
     hora_inicio: str
     hora_fim: str
     disponivel: bool
-    instrutor_id_instrutor: str
-    instrutor_nome: Optional[str] = None
 
-class AgendaCreate(BaseModel):
-    data: str
+class AgendaFixaCreate(BaseModel):
+    instrutor_id_instrutor: str
+    dias_semana: str
     hora_inicio: str
     hora_fim: str
     disponivel: bool = True
-    instrutor_id_instrutor: str
 
-class AgendaUpdate(BaseModel):
-    data: Optional[str] = None
+class AgendaFixaUpdate(BaseModel):
+    instrutor_id_instrutor: Optional[str] = None
+    dias_semana: Optional[str] = None
     hora_inicio: Optional[str] = None
     hora_fim: Optional[str] = None
     disponivel: Optional[bool] = None
-    instrutor_id_instrutor: Optional[str] = None
 
+# Nova estrutura de Treino
 class Treino(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id_treino: str
@@ -123,30 +125,44 @@ class Treino(BaseModel):
     nome_treino: str
     aluno_id_aluno: str
     aluno_nome: Optional[str] = None
-    agenda_id_agenda: Optional[str] = None
+    # Campos para treino personalizado
+    data: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+    instrutor_id_instrutor: Optional[str] = None
+    instrutor_nome: Optional[str] = None
     descricao: Optional[str] = None
     nivel: Optional[str] = None
-    duracao: Optional[str] = None
     concluido: bool = False
 
 class TreinoCreate(BaseModel):
     tipo_treino: str
     nome_treino: str
     aluno_id_aluno: str
-    agenda_id_agenda: Optional[str] = None
+    # Campos opcionais para personalizado
+    data: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+    instrutor_id_instrutor: Optional[str] = None
     descricao: Optional[str] = None
     nivel: Optional[str] = None
-    duracao: Optional[str] = None
 
 class TreinoUpdate(BaseModel):
     tipo_treino: Optional[str] = None
     nome_treino: Optional[str] = None
     aluno_id_aluno: Optional[str] = None
-    agenda_id_agenda: Optional[str] = None
+    data: Optional[str] = None
+    hora_inicio: Optional[str] = None
+    hora_fim: Optional[str] = None
+    instrutor_id_instrutor: Optional[str] = None
     descricao: Optional[str] = None
     nivel: Optional[str] = None
-    duracao: Optional[str] = None
     concluido: Optional[bool] = None
+
+class InstrutorDisponivel(BaseModel):
+    id_instrutor: str
+    nome: str
+    idade: int
 
 class DashboardStats(BaseModel):
     total_alunos: int
@@ -155,17 +171,16 @@ class DashboardStats(BaseModel):
     total_treinos: int
     agendas_disponiveis: int
 
-class TreinoPersonalizadoDetalhado(BaseModel):
+class InstrutorComHorario(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    id_treino: str
-    nome_treino: str
-    aluno_nome: str
-    instrutor_nome: str
-    nivel: Optional[str] = None
-    data: str
-    hora_inicio: str
-    hora_fim: str
-    concluido: bool
+    id_instrutor: str
+    nome: str
+    idade: int
+    email: Optional[str] = None
+    telefone: Optional[str] = None
+    dias_semana: Optional[str] = None
+    horario: Optional[str] = None
+    disponivel: bool = True
 
 # ===================== AUTH MIDDLEWARE =====================
 
@@ -191,11 +206,9 @@ async def login(request: LoginRequest):
     if not admin:
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
     
-    # Verify password
     if not bcrypt.checkpw(request.senha.encode('utf-8'), admin['senha'].encode('utf-8')):
         raise HTTPException(status_code=401, detail="Email ou senha incorretos")
     
-    # Generate JWT token
     token = jwt.encode(
         {"admin_id": str(admin['_id']), "email": admin['email']},
         SECRET_KEY,
@@ -229,9 +242,9 @@ async def get_current_admin(admin_id: str = Depends(verify_token)):
 async def get_dashboard_stats(admin_id: str = Depends(verify_token)):
     total_alunos = await db.alunos.count_documents({})
     total_instrutores = await db.instrutores.count_documents({})
-    total_agendas = await db.agendas.count_documents({})
+    total_agendas = await db.agendas_fixas.count_documents({})
     total_treinos = await db.treinos.count_documents({})
-    agendas_disponiveis = await db.agendas.count_documents({"disponivel": True})
+    agendas_disponiveis = await db.agendas_fixas.count_documents({"disponivel": True})
     
     return {
         "total_alunos": total_alunos,
@@ -241,63 +254,49 @@ async def get_dashboard_stats(admin_id: str = Depends(verify_token)):
         "agendas_disponiveis": agendas_disponiveis
     }
 
-@api_router.get("/dashboard/treinos-personalizados", response_model=List[TreinoPersonalizadoDetalhado])
-async def get_treinos_personalizados_detalhados(admin_id: str = Depends(verify_token)):
-    # Buscar todos os treinos personalizados
-    treinos = await db.treinos.find({"tipo_treino": "Personalizado"}).to_list(1000)
-    
+@api_router.get("/dashboard/instrutores-horarios", response_model=List[InstrutorComHorario])
+async def get_instrutores_com_horarios(admin_id: str = Depends(verify_token)):
+    instrutores = await db.instrutores.find({}).to_list(1000)
     result = []
-    for treino in treinos:
-        # Buscar aluno
-        aluno = await db.alunos.find_one({"_id": ObjectId(treino['aluno_id_aluno'])})
-        aluno_nome = aluno['nome'] if aluno else "Aluno não encontrado"
+    
+    for instrutor in instrutores:
+        agenda = await db.agendas_fixas.find_one({"instrutor_id_instrutor": str(instrutor['_id'])})
         
-        # Buscar agenda e instrutor se existir
-        instrutor_nome = "Não agendado"
-        data = "-"
-        hora_inicio = "-"
-        hora_fim = "-"
+        dias_semana = None
+        horario = None
+        disponivel = True
         
-        if treino.get('agenda_id_agenda'):
-            agenda = await db.agendas.find_one({"_id": ObjectId(treino['agenda_id_agenda'])})
-            if agenda:
-                data = agenda['data']
-                hora_inicio = agenda['hora_inicio']
-                hora_fim = agenda['hora_fim']
-                
-                # Buscar instrutor
-                instrutor = await db.instrutores.find_one({"_id": ObjectId(agenda['instrutor_id_instrutor'])})
-                if instrutor:
-                    instrutor_nome = instrutor['nome']
+        if agenda:
+            dias_semana = agenda.get('dias_semana')
+            horario = f"{agenda.get('hora_inicio')} - {agenda.get('hora_fim')}"
+            disponivel = agenda.get('disponivel', True)
         
         result.append({
-            "id_treino": str(treino['_id']),
-            "nome_treino": treino['nome_treino'],
-            "aluno_nome": aluno_nome,
-            "instrutor_nome": instrutor_nome,
-            "nivel": treino.get('nivel', '-'),
-            "data": data,
-            "hora_inicio": hora_inicio,
-            "hora_fim": hora_fim,
-            "concluido": treino.get('concluido', False)
+            "id_instrutor": str(instrutor['_id']),
+            "nome": instrutor['nome'],
+            "idade": instrutor['idade'],
+            "email": instrutor.get('email'),
+            "telefone": instrutor.get('telefone'),
+            "dias_semana": dias_semana,
+            "horario": horario,
+            "disponivel": disponivel
         })
     
     return result
 
-@api_router.patch("/treinos/{id_treino}/toggle-concluido")
-async def toggle_treino_concluido(id_treino: str, admin_id: str = Depends(verify_token)):
-    treino = await db.treinos.find_one({"_id": ObjectId(id_treino)})
-    if not treino:
-        raise HTTPException(status_code=404, detail="Treino não encontrado")
+@api_router.patch("/instrutores/{id_instrutor}/toggle-disponibilidade")
+async def toggle_instrutor_disponibilidade(id_instrutor: str, admin_id: str = Depends(verify_token)):
+    agenda = await db.agendas_fixas.find_one({"instrutor_id_instrutor": id_instrutor})
     
-    novo_status = not treino.get('concluido', False)
-    
-    await db.treinos.update_one(
-        {"_id": ObjectId(id_treino)},
-        {"$set": {"concluido": novo_status}}
-    )
-    
-    return {"message": "Status atualizado", "concluido": novo_status}
+    if agenda:
+        novo_status = not agenda.get('disponivel', True)
+        await db.agendas_fixas.update_one(
+            {"instrutor_id_instrutor": id_instrutor},
+            {"$set": {"disponivel": novo_status}}
+        )
+        return {"message": "Disponibilidade atualizada", "disponivel": novo_status}
+    else:
+        raise HTTPException(status_code=404, detail="Instrutor não possui horário fixo cadastrado")
 
 # ===================== ALUNOS CRUD =====================
 
@@ -348,7 +347,6 @@ async def delete_aluno(id_aluno: str, admin_id: str = Depends(verify_token)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
     
-    # Delete associated treinos
     await db.treinos.delete_many({"aluno_id_aluno": id_aluno})
     
     return {"message": "Aluno deletado com sucesso"}
@@ -402,16 +400,15 @@ async def delete_instrutor(id_instrutor: str, admin_id: str = Depends(verify_tok
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Instrutor não encontrado")
     
-    # Delete associated agendas
-    await db.agendas.delete_many({"instrutor_id_instrutor": id_instrutor})
+    await db.agendas_fixas.delete_many({"instrutor_id_instrutor": id_instrutor})
     
     return {"message": "Instrutor deletado com sucesso"}
 
-# ===================== AGENDAS CRUD =====================
+# ===================== AGENDAS FIXAS CRUD =====================
 
-@api_router.get("/agendas", response_model=List[Agenda])
-async def get_agendas(admin_id: str = Depends(verify_token)):
-    agendas = await db.agendas.find({}).to_list(1000)
+@api_router.get("/agendas-fixas", response_model=List[AgendaFixa])
+async def get_agendas_fixas(admin_id: str = Depends(verify_token)):
+    agendas = await db.agendas_fixas.find({}).to_list(1000)
     result = []
     
     for agenda in agendas:
@@ -424,19 +421,22 @@ async def get_agendas(admin_id: str = Depends(verify_token)):
     
     return result
 
-@api_router.post("/agendas", response_model=Agenda)
-async def create_agenda(agenda: AgendaCreate, admin_id: str = Depends(verify_token)):
-    # Verify instrutor exists
+@api_router.post("/agendas-fixas", response_model=AgendaFixa)
+async def create_agenda_fixa(agenda: AgendaFixaCreate, admin_id: str = Depends(verify_token)):
     instrutor = await db.instrutores.find_one({"_id": ObjectId(agenda.instrutor_id_instrutor)})
     if not instrutor:
         raise HTTPException(status_code=404, detail="Instrutor não encontrado")
     
-    # Validate time
     if agenda.hora_fim <= agenda.hora_inicio:
         raise HTTPException(status_code=400, detail="Hora de fim deve ser maior que hora de início")
     
-    result = await db.agendas.insert_one(agenda.model_dump())
-    created = await db.agendas.find_one({"_id": result.inserted_id})
+    # Check if instrutor already has agenda
+    existing = await db.agendas_fixas.find_one({"instrutor_id_instrutor": agenda.instrutor_id_instrutor})
+    if existing:
+        raise HTTPException(status_code=400, detail="Instrutor já possui horário fixo cadastrado")
+    
+    result = await db.agendas_fixas.insert_one(agenda.model_dump())
+    created = await db.agendas_fixas.find_one({"_id": result.inserted_id})
     
     return {
         **created,
@@ -444,8 +444,8 @@ async def create_agenda(agenda: AgendaCreate, admin_id: str = Depends(verify_tok
         "instrutor_nome": instrutor['nome']
     }
 
-@api_router.put("/agendas/{id_agenda}", response_model=Agenda)
-async def update_agenda(id_agenda: str, agenda: AgendaUpdate, admin_id: str = Depends(verify_token)):
+@api_router.put("/agendas-fixas/{id_agenda}", response_model=AgendaFixa)
+async def update_agenda_fixa(id_agenda: str, agenda: AgendaFixaUpdate, admin_id: str = Depends(verify_token)):
     update_data = {k: v for k, v in agenda.model_dump().items() if v is not None}
     
     if not update_data:
@@ -456,7 +456,7 @@ async def update_agenda(id_agenda: str, agenda: AgendaUpdate, admin_id: str = De
         if not instrutor:
             raise HTTPException(status_code=404, detail="Instrutor não encontrado")
     
-    result = await db.agendas.update_one(
+    result = await db.agendas_fixas.update_one(
         {"_id": ObjectId(id_agenda)},
         {"$set": update_data}
     )
@@ -464,7 +464,7 @@ async def update_agenda(id_agenda: str, agenda: AgendaUpdate, admin_id: str = De
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Agenda não encontrada")
     
-    updated = await db.agendas.find_one({"_id": ObjectId(id_agenda)})
+    updated = await db.agendas_fixas.find_one({"_id": ObjectId(id_agenda)})
     instrutor = await db.instrutores.find_one({"_id": ObjectId(updated['instrutor_id_instrutor'])})
     
     return {
@@ -473,9 +473,9 @@ async def update_agenda(id_agenda: str, agenda: AgendaUpdate, admin_id: str = De
         "instrutor_nome": instrutor['nome'] if instrutor else "Instrutor não encontrado"
     }
 
-@api_router.delete("/agendas/{id_agenda}")
-async def delete_agenda(id_agenda: str, admin_id: str = Depends(verify_token)):
-    result = await db.agendas.delete_one({"_id": ObjectId(id_agenda)})
+@api_router.delete("/agendas-fixas/{id_agenda}")
+async def delete_agenda_fixa(id_agenda: str, admin_id: str = Depends(verify_token)):
+    result = await db.agendas_fixas.delete_one({"_id": ObjectId(id_agenda)})
     
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Agenda não encontrada")
@@ -491,38 +491,93 @@ async def get_treinos(admin_id: str = Depends(verify_token)):
     
     for treino in treinos:
         aluno = await db.alunos.find_one({"_id": ObjectId(treino['aluno_id_aluno'])})
-        result.append({
-            **treino,
-            "id_treino": str(treino['_id']),
-            "aluno_nome": aluno['nome'] if aluno else "Aluno não encontrado"
-        })
+        treino_dict = {**treino, "id_treino": str(treino['_id']), "aluno_nome": aluno['nome'] if aluno else "Aluno não encontrado"}
+        
+        if treino.get('instrutor_id_instrutor'):
+            instrutor = await db.instrutores.find_one({"_id": ObjectId(treino['instrutor_id_instrutor'])})
+            treino_dict['instrutor_nome'] = instrutor['nome'] if instrutor else "Instrutor não encontrado"
+        
+        result.append(treino_dict)
     
     return result
 
+@api_router.get("/instrutores-disponiveis")
+async def get_instrutores_disponiveis(data: str, hora_inicio: str, hora_fim: str, admin_id: str = Depends(verify_token)):
+    # Get all available instructors
+    agendas_disponiveis = await db.agendas_fixas.find({"disponivel": True}).to_list(1000)
+    
+    instrutores_disponiveis = []
+    
+    for agenda in agendas_disponiveis:
+        instrutor_id = agenda['instrutor_id_instrutor']
+        
+        # Check if instructor is available at this time
+        if agenda['hora_inicio'] <= hora_inicio and agenda['hora_fim'] >= hora_fim:
+            # Check for conflicts with existing trainings
+            conflito = await db.treinos.find_one({
+                "instrutor_id_instrutor": instrutor_id,
+                "data": data,
+                "$or": [
+                    {"hora_inicio": {"$lte": hora_inicio}, "hora_fim": {"$gt": hora_inicio}},
+                    {"hora_inicio": {"$lt": hora_fim}, "hora_fim": {"$gte": hora_fim}},
+                    {"hora_inicio": {"$gte": hora_inicio}, "hora_fim": {"$lte": hora_fim}}
+                ]
+            })
+            
+            if not conflito:
+                instrutor = await db.instrutores.find_one({"_id": ObjectId(instrutor_id)})
+                if instrutor:
+                    instrutores_disponiveis.append({
+                        "id_instrutor": str(instrutor['_id']),
+                        "nome": instrutor['nome'],
+                        "idade": instrutor['idade']
+                    })
+    
+    return instrutores_disponiveis
+
 @api_router.post("/treinos", response_model=Treino)
 async def create_treino(treino: TreinoCreate, admin_id: str = Depends(verify_token)):
-    # Verify aluno exists
     aluno = await db.alunos.find_one({"_id": ObjectId(treino.aluno_id_aluno)})
     if not aluno:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
     
-    # Verify agenda if provided
-    if treino.agenda_id_agenda:
-        agenda = await db.agendas.find_one({"_id": ObjectId(treino.agenda_id_agenda)})
-        if not agenda:
-            raise HTTPException(status_code=404, detail="Agenda não encontrada")
-    
     treino_dict = treino.model_dump()
     treino_dict['concluido'] = False
+    
+    # Validate personalizado
+    if treino.tipo_treino == "Personalizado":
+        if not all([treino.data, treino.hora_inicio, treino.hora_fim, treino.instrutor_id_instrutor]):
+            raise HTTPException(status_code=400, detail="Treino personalizado requer data, horário e instrutor")
+        
+        # Verify instructor
+        instrutor = await db.instrutores.find_one({"_id": ObjectId(treino.instrutor_id_instrutor)})
+        if not instrutor:
+            raise HTTPException(status_code=404, detail="Instrutor não encontrado")
+        
+        # Check availability
+        conflito = await db.treinos.find_one({
+            "instrutor_id_instrutor": treino.instrutor_id_instrutor,
+            "data": treino.data,
+            "$or": [
+                {"hora_inicio": {"$lte": treino.hora_inicio}, "hora_fim": {"$gt": treino.hora_inicio}},
+                {"hora_inicio": {"$lt": treino.hora_fim}, "hora_fim": {"$gte": treino.hora_fim}},
+                {"hora_inicio": {"$gte": treino.hora_inicio}, "hora_fim": {"$lte": treino.hora_fim}}
+            ]
+        })
+        
+        if conflito:
+            raise HTTPException(status_code=400, detail="Instrutor já possui treino agendado neste horário")
     
     result = await db.treinos.insert_one(treino_dict)
     created = await db.treinos.find_one({"_id": result.inserted_id})
     
-    return {
-        **created,
-        "id_treino": str(created['_id']),
-        "aluno_nome": aluno['nome']
-    }
+    response_dict = {**created, "id_treino": str(created['_id']), "aluno_nome": aluno['nome']}
+    
+    if created.get('instrutor_id_instrutor'):
+        instrutor = await db.instrutores.find_one({"_id": ObjectId(created['instrutor_id_instrutor'])})
+        response_dict['instrutor_nome'] = instrutor['nome'] if instrutor else None
+    
+    return response_dict
 
 @api_router.put("/treinos/{id_treino}", response_model=Treino)
 async def update_treino(id_treino: str, treino: TreinoUpdate, admin_id: str = Depends(verify_token)):
@@ -547,11 +602,13 @@ async def update_treino(id_treino: str, treino: TreinoUpdate, admin_id: str = De
     updated = await db.treinos.find_one({"_id": ObjectId(id_treino)})
     aluno = await db.alunos.find_one({"_id": ObjectId(updated['aluno_id_aluno'])})
     
-    return {
-        **updated,
-        "id_treino": str(updated['_id']),
-        "aluno_nome": aluno['nome'] if aluno else "Aluno não encontrado"
-    }
+    response_dict = {**updated, "id_treino": str(updated['_id']), "aluno_nome": aluno['nome'] if aluno else None}
+    
+    if updated.get('instrutor_id_instrutor'):
+        instrutor = await db.instrutores.find_one({"_id": ObjectId(updated['instrutor_id_instrutor'])})
+        response_dict['instrutor_nome'] = instrutor['nome'] if instrutor else None
+    
+    return response_dict
 
 @api_router.delete("/treinos/{id_treino}")
 async def delete_treino(id_treino: str, admin_id: str = Depends(verify_token)):
@@ -561,6 +618,21 @@ async def delete_treino(id_treino: str, admin_id: str = Depends(verify_token)):
         raise HTTPException(status_code=404, detail="Treino não encontrado")
     
     return {"message": "Treino deletado com sucesso"}
+
+@api_router.patch("/treinos/{id_treino}/toggle-concluido")
+async def toggle_treino_concluido(id_treino: str, admin_id: str = Depends(verify_token)):
+    treino = await db.treinos.find_one({"_id": ObjectId(id_treino)})
+    if not treino:
+        raise HTTPException(status_code=404, detail="Treino não encontrado")
+    
+    novo_status = not treino.get('concluido', False)
+    
+    await db.treinos.update_one(
+        {"_id": ObjectId(id_treino)},
+        {"$set": {"concluido": novo_status}}
+    )
+    
+    return {"message": "Status atualizado", "concluido": novo_status}
 
 # Include router
 app.include_router(api_router)
@@ -573,7 +645,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -582,7 +653,6 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("startup")
 async def startup_db():
-    # Create default admin if not exists
     existing_admin = await db.admins.find_one({"email": "admin@gymtrack.com"})
     if not existing_admin:
         hashed = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt())
