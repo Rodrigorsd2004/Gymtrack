@@ -422,9 +422,6 @@ Para ambientes de produção, considere:
 
 Contribuições são bem-vindas! Sinta-se à vontade para abrir issues ou pull requests.
 
-## 📄 Licença
-
-Este projeto está sob a licença MIT.
 
 ## 👨‍💻 Autor
 
